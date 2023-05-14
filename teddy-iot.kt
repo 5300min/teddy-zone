@@ -1,5 +1,3 @@
-package com.kakaopay.cafe.api.domain.provider
-
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.client.builder.AwsClientBuilder
 import com.amazonaws.regions.DefaultAwsRegionProviderChain
