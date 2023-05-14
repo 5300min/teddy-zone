@@ -11,7 +11,11 @@ import com.amazonaws.services.iot.model.CreatePolicyRequest
 import com.amazonaws.services.iot.model.CreatePolicyResult
 import com.amazonaws.services.iot.model.CreateThingRequest
 import com.amazonaws.services.iot.model.CreateThingResult
+import com.amazonaws.services.iot.model.DeletePolicyRequest
+import com.amazonaws.services.iot.model.DetachPrincipalPolicyRequest
 import com.amazonaws.services.iot.model.GetPolicyRequest
+import com.amazonaws.services.iot.model.ListPoliciesRequest
+import com.amazonaws.services.iot.model.ListPrincipalPoliciesRequest
 import com.amazonaws.services.iotdata.AWSIotData
 import com.amazonaws.services.iotdata.AWSIotDataClientBuilder
 import com.amazonaws.services.iotdata.model.PublishRequest
@@ -63,42 +67,38 @@ fun createThingAndCertificate(thingName: String): CreateKeysAndCertificateResult
         .withPrincipal(createKeysAndCertificateResult.certificateArn)
     iotClient.attachThingPrincipal(attachThingPrincipalRequest)
 
-    // Create a new policy
-    val policyName = "teddy_policy2"
-    val policyDocument = """
-        {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": "iot:Connect",
-                    "Resource": "arn:aws:iot:ap-northeast-2:111:client/*"
-                },
-                {
-                    "Effect": "Allow",
-                    "Action": [
-                        "iot:Publish",
-                        "iot:Receive"
-                    ],
-                    "Resource": "arn:aws:iot:ap-northeast-2:111:topic/*"
-                },
-                {
-                    "Effect": "Allow",
-                    "Action": "iot:Subscribe",
-                    "Resource": [
-                        "arn:aws:iot:ap-northeast-2:111:topicfilter/pos",
-                        "arn:aws:iot:ap-northeast-2:111:topicfilter/pos2"
-                    ]
-                }
-            ]
+    // Check if a policy with the same name already exists
+    val listPoliciesRequest = ListPoliciesRequest()
+    val listPoliciesResult = iotClient.listPolicies(listPoliciesRequest)
+    for (policy in listPoliciesResult.policies) {
+        if (policy.policyName == thingName) {
+            // Delete the existing policy
+            val deletePolicyRequest = DeletePolicyRequest()
+                .withPolicyName(policy.policyName)
+            iotClient.deletePolicy(deletePolicyRequest)
         }
-    """.trimIndent()
+    }
+
+    // Create a new policy
+    val policyName = thingName
+    val policyDocument = getPolicyDocument(thingName)
     val createPolicyRequest = CreatePolicyRequest()
         .withPolicyName(policyName)
         .withPolicyDocument(policyDocument)
     val createPolicyResult: CreatePolicyResult = iotClient.createPolicy(createPolicyRequest)
 
-    // Attach the policy to the certificate
+    // Detach all existing policies from the certificate
+    val listPrincipalPoliciesRequest = ListPrincipalPoliciesRequest()
+        .withPrincipal(createKeysAndCertificateResult.certificateArn)
+    val listPrincipalPoliciesResult = iotClient.listPrincipalPolicies(listPrincipalPoliciesRequest)
+    for (policy in listPrincipalPoliciesResult.policies) {
+        val detachPrincipalPolicyRequest = DetachPrincipalPolicyRequest()
+            .withPolicyName(policy.policyName)
+            .withPrincipal(createKeysAndCertificateResult.certificateArn)
+        iotClient.detachPrincipalPolicy(detachPrincipalPolicyRequest)
+    }
+
+    // Attach the new policy to the certificate
     val attachPrincipalPolicyRequest = AttachPrincipalPolicyRequest()
         .withPolicyName(policyName)
         .withPrincipal(createKeysAndCertificateResult.certificateArn)
@@ -114,8 +114,38 @@ fun createThingAndCertificate(thingName: String): CreateKeysAndCertificateResult
     return createKeysAndCertificateResult
 }
 
-fun main() {
-    publish("test Hello")
+private fun getPolicyDocument(thingsName: String) = """
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "iot:Connect",
+                "Resource": "arn:aws:iot:ap-northeast-2:366014620146:client/*"
+            },
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "iot:Publish",
+                    "iot:Receive"
+                ],
+                "Resource": "arn:aws:iot:ap-northeast-2:366014620146:topic/*"
+            },
+            {
+                "Effect": "Allow",
+                "Action": "iot:Subscribe",
+                "Resource": [
+                    "arn:aws:iot:ap-northeast-2:366014620146:topicfilter/pos",
+                    "arn:aws:iot:ap-northeast-2:366014620146:topicfilter/pos2",
+                    "arn:aws:iot:ap-northeast-2:366014620146:topicfilter/device/${thingsName}"
+                ]
+            }
+        ]
+    }
+""".trimIndent()
 
-    createThingAndCertificate("test_thing")
+fun main() {
+//    publish("test Hello")
+
+    createThingAndCertificate("test_thing8")
 }
